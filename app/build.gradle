@@ -1,0 +1,52 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.phonetweaks.xposed'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.phonetweaks.xposed"
+        minSdk 30
+        targetSdk 35
+        versionCode 4
+        versionName "4.0"
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.debug
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    // DexKit ships its native lookup engine as libdexkit.so. Xposed modules load
+    // their own dex/so files into the *host* app's process through a non-standard
+    // classloader path, so we force legacy (uncompressed) native lib packaging to
+    // avoid System.loadLibrary("dexkit") throwing UnsatisfiedLinkError on some
+    // devices/ROMs. See: https://luckypray.org/DexKit/en/guide/quick-start
+    packaging {
+        jniLibs {
+            useLegacyPackaging true
+        }
+    }
+}
+
+dependencies {
+    // LSPosed / Xposed API - compile-only (provided by the framework at runtime)
+    compileOnly 'de.robv.android.xposed:api:82'
+
+    // DexKit: runtime dex/method/field lookup used to auto-map the Dialer's
+    // obfuscated eligibility-check symbols instead of hardcoding class/method/
+    // field names that change every time Google reobfuscates a new build.
+    implementation 'org.luckypray:dexkit:2.0.7'
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'com.google.android.material:material:1.12.0'
+}

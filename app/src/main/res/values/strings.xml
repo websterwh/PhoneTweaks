@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Phone Tweaks</string>
+    <string name="status_active">Module Active</string>
+    <string name="status_desc">Hooks successfully injected into Google Phone</string>
+
+    <string name="root_status_granted">Root Access: Granted</string>
+    <string name="root_desc_granted">1-tap restart enabled to apply flag changes immediately</string>
+    <string name="root_status_missing">Root Access: Not Granted (Optional)</string>
+    <string name="root_desc_missing">Root is not required for hooks to work, but is recommended for 1-tap phone restart</string>
+    <string name="btn_request_root">Grant Root Access</string>
+
+    <string name="category_hold_for_me">Hold for Me</string>
+    <string name="pref_hfm_any_number_title">Hold for Me on Any Number</string>
+    <string name="pref_hfm_any_number_desc">Allow Hold for Me on personal, local, and mobile numbers</string>
+    <string name="pref_hfm_country_title">Worldwide Country Unlock</string>
+    <string name="pref_hfm_country_desc">Remove regional restrictions for Hold for Me</string>
+
+    <string name="category_features">Smart &amp; In-Call Features</string>
+    <string name="pref_call_screen_title">Google Call Screen</string>
+    <string name="pref_call_screen_desc">Enable Call Screen, SpeakEasy, and audio saving</string>
+    <string name="pref_call_recording_title">Call Recording</string>
+    <string name="pref_call_recording_desc">Enable native two-way call recording</string>
+    <string name="pref_silent_recording_title">Silent Call Recording</string>
+    <string name="pref_silent_recording_desc">Silence loud announcement for both caller and receiver</string>
+    <string name="pref_audio_emoji_title">Audio Emoji</string>
+    <string name="pref_audio_emoji_desc">In-call sound reactions and animations</string>
+    <string name="pref_scam_detection_title">AI Scam Detection</string>
+    <string name="pref_scam_detection_desc">Real-time on-device scam protection (Pixel 9)</string>
+    <string name="pref_direct_my_call_title">Direct My Call</string>
+    <string name="pref_direct_my_call_desc">Transcribe automated phone menus into buttons</string>
+    <string name="pref_dmc_toll_free_title">Toll-Free &amp; Businesses Only</string>
+    <string name="pref_dmc_toll_free_desc">Only activate for 800 numbers and verified business lines</string>
+    <string name="pref_dmc_exclude_contacts_title">Exclude Personal Contacts</string>
+    <string name="pref_dmc_exclude_contacts_desc">Never show phone menus when calling saved contacts</string>
+
+    <string name="category_actions">Actions</string>
+    <string name="btn_restart_phone">Restart Google Phone</string>
+    <string name="btn_open_dialer_settings">Open Phone Settings</string>
+    <string name="toast_phone_restarted">Google Phone restarted</string>
+</resources>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Material 3 DayNight theme: automatically responds to system dark/light mode
+         and applies Material You dynamic colors extracted from the user's wallpaper. -->
+    <style name="Theme.PhoneTweaks" parent="Theme.Material3.DayNight.NoActionBar" />
+</resources>
