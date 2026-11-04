@@ -38,7 +38,10 @@ public class PhoneTweaksHook implements IXposedHookLoadPackage {
 
     private PhoneTweaksPrefs prefs;
     private static volatile boolean isExportingNativeState = false;
-    private static volatile boolean currentCallAllowsDirectMyCall = true;
+    // Fail closed: filters must explicitly approve each active call. The native Call Assist
+    // button remains available as the user-requested manual override.
+    private static volatile boolean currentCallAllowsDirectMyCall = false;
+    private static volatile boolean wasInActiveCall = false;
     private static volatile Context globalAppContext = null;
     private static volatile Field cachedPhoneInfoNumberField = null;
 
@@ -483,7 +486,12 @@ public class PhoneTweaksHook implements IXposedHookLoadPackage {
         if (ctx == null) return false;
         try {
             android.telecom.TelecomManager tm = (android.telecom.TelecomManager) ctx.getSystemService(Context.TELECOM_SERVICE);
-            return tm != null && tm.isInCall();
+            boolean inCall = tm != null && tm.isInCall();
+            if (!inCall && wasInActiveCall) {
+                currentCallAllowsDirectMyCall = false;
+            }
+            wasInActiveCall = inCall;
+            return inCall;
         } catch (Throwable ignored) {
             return false;
         }
@@ -508,12 +516,19 @@ public class PhoneTweaksHook implements IXposedHookLoadPackage {
     private static boolean isContact(Context context, String number) {
         Context ctx = context != null ? context : globalAppContext;
         if (ctx == null || number == null || number.trim().isEmpty()) return false;
+        String original = number.trim();
+        String normalized = android.telephony.PhoneNumberUtils.normalizeNumber(original);
+        return matchesContactNumber(ctx, original)
+                || (!normalized.equals(original) && matchesContactNumber(ctx, normalized));
+    }
+
+    private static boolean matchesContactNumber(Context context, String number) {
         try {
             android.net.Uri uri = android.net.Uri.withAppendedPath(
                     android.provider.ContactsContract.PhoneLookup.CONTENT_FILTER_URI,
-                    android.net.Uri.encode(number.trim())
+                    android.net.Uri.encode(number)
             );
-            try (android.database.Cursor cursor = ctx.getContentResolver().query(
+            try (android.database.Cursor cursor = context.getContentResolver().query(
                     uri,
                     new String[]{android.provider.ContactsContract.PhoneLookup._ID},
                     null, null, null
