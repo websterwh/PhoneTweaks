@@ -43,7 +43,6 @@ public class PhoneTweaksHook implements IXposedHookLoadPackage {
     private static volatile boolean currentCallAllowsDirectMyCall = false;
     private static volatile boolean wasInActiveCall = false;
     private static volatile Context globalAppContext = null;
-    private static volatile Field cachedPhoneInfoNumberField = null;
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
@@ -103,38 +102,51 @@ public class PhoneTweaksHook implements IXposedHookLoadPackage {
                     @Override
                     protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                         prefs.reload();
-                        if (!prefs.isHoldForMeAnyNumberEnabled()) return;
+                        if (!prefs.isDirectMyCallEnabled()) {
+                            currentCallAllowsDirectMyCall = false;
+                            return;
+                        }
 
                         Object phoneInfo = param.args.length > 0 ? param.args[0] : null;
                         if (phoneInfo == null) return;
 
-                        // Immune to switch-case drift: check whether the argument matches the phone info class
-                        boolean isEligibilityCase = false;
-                        if (phoneInfoClass != null) {
+                        int caseNum = -1;
+                        try {
+                            caseNum = mapping.caseSelectorField.getInt(param.thisObject);
+                        } catch (Throwable ignored) {}
+
+                        boolean isEligibilityCase = (caseNum == 12 || caseNum == 10 || caseNum == 9 || caseNum == 17);
+                        if (!isEligibilityCase && phoneInfoClass != null) {
                             isEligibilityCase = phoneInfoClass.isInstance(phoneInfo);
-                        } else {
-                            // Fallback using case selector: 10 in v244+, 9 in v230, 17 in older builds
-                            int caseNum = mapping.caseSelectorField.getInt(param.thisObject);
-                            if (caseNum == 10 || caseNum == 9 || caseNum == 17) {
-                                isEligibilityCase = true;
-                            }
+                        }
+                        if (!isEligibilityCase) {
+                            try {
+                                Field f = phoneInfo.getClass().getDeclaredField("g");
+                                if (f.getType() == boolean.class) {
+                                    isEligibilityCase = true;
+                                }
+                            } catch (Throwable ignored) {}
                         }
 
                         if (!isEligibilityCase) return;
 
-                        Field tollFreeField = (bizMapping != null && bizMapping.tollFreeField != null)
-                                ? bizMapping.tollFreeField
-                                : DexKitEligibilityMapper.resolveTollFreeField(apkPath, classLoader, phoneInfo, mapping, DIALER_PKG, appContext);
+                        Field tollFreeField = null;
+                        try {
+                            tollFreeField = phoneInfo.getClass().getDeclaredField("g");
+                            tollFreeField.setAccessible(true);
+                        } catch (Throwable ignored) {}
+
+                        if (tollFreeField == null) {
+                            tollFreeField = (bizMapping != null && bizMapping.tollFreeField != null)
+                                    ? bizMapping.tollFreeField
+                                    : DexKitEligibilityMapper.resolveTollFreeField(apkPath, classLoader, phoneInfo, mapping, DIALER_PKG, appContext);
+                        }
 
                         if (tollFreeField != null && tollFreeField.getDeclaringClass().isInstance(phoneInfo)) {
                             evaluateDirectMyCallEligibility(prefs, appContext, phoneInfo, tollFreeField);
-                            if (prefs.isHoldForMeAnyNumberEnabled()) {
-                                tollFreeField.setBoolean(phoneInfo, true);
-                            }
                         }
                     }
                 });
-
                 Log.i(TAG, "Hook installed on eligibility dispatcher: " + mapping.eligibilityMethod
                         + " (case-drift immune: " + (phoneInfoClass != null) + ")");
             }
@@ -146,7 +158,6 @@ public class PhoneTweaksHook implements IXposedHookLoadPackage {
                         prefs.reload();
                         Object arg = param.args.length > 0 ? param.args[0] : null;
                         if (arg != null && bizMapping.tollFreeField.getDeclaringClass().isInstance(arg)) {
-                            evaluateDirectMyCallEligibility(prefs, appContext, arg, bizMapping.tollFreeField);
                             if (prefs.isHoldForMeAnyNumberEnabled()) {
                                 bizMapping.tollFreeField.setBoolean(arg, true);
                             }
@@ -235,9 +246,12 @@ public class PhoneTweaksHook implements IXposedHookLoadPackage {
                             param.setResult(false);
                             return;
                         }
-                        boolean inCall = isInActiveCall(appContext);
-                        boolean allow = (!inCall) || currentCallAllowsDirectMyCall;
-                        param.setResult(allow);
+                        if ("xatu_automatic_display_enrollment_status".equals(key)
+                                || "xatu_show_ahead_enrollment_status".equals(key)) {
+                            param.setResult(currentCallAllowsDirectMyCall);
+                            return;
+                        }
+                        param.setResult(true);
                         return;
                     }
                 }
@@ -286,7 +300,16 @@ public class PhoneTweaksHook implements IXposedHookLoadPackage {
                         else if (prefs.isHoldForMeAnyNumberEnabled() && isHoldForMeFlag(flagName)) shouldEnable = true;
                         else if (prefs.isAudioEmojiEnabled() && isAudioEmojiFlag(flagName)) shouldEnable = true;
                         else if (prefs.isScamDetectionEnabled() && isScamDetectionFlag(flagName)) shouldEnable = true;
-                        else if (prefs.isDirectMyCallEnabled() && isDirectMyCallFlag(flagName)) shouldEnable = true;
+                        else if (prefs.isDirectMyCallEnabled() && isDirectMyCallFlag(flagName)) {
+                            if ("xatu_automatic_display_enrollment_status".equals(flagName)
+                                    || "xatu_show_ahead_enrollment_status".equals(flagName)) {
+                                if (currentCallAllowsDirectMyCall) {
+                                    shouldEnable = true;
+                                }
+                            } else {
+                                shouldEnable = true;
+                            }
+                        }
 
                         if (shouldEnable && trueFlagHolder != null) {
                             param.setResult(trueFlagHolder);
@@ -500,17 +523,43 @@ public class PhoneTweaksHook implements IXposedHookLoadPackage {
     private static String getPhoneNumberFromInfo(Object phoneInfo) {
         if (phoneInfo == null) return null;
         try {
-            Field field = cachedPhoneInfoNumberField;
-            if (field == null) {
-                field = phoneInfo.getClass().getDeclaredField("c");
-                field.setAccessible(true);
-                cachedPhoneInfoNumberField = field;
+            Field fieldC = phoneInfo.getClass().getDeclaredField("c");
+            fieldC.setAccessible(true);
+            Object valC = fieldC.get(phoneInfo);
+            if (valC instanceof String && !((String) valC).trim().isEmpty()) {
+                return ((String) valC).trim();
             }
-            Object val = field.get(phoneInfo);
-            return val instanceof String ? (String) val : null;
-        } catch (Throwable ignored) {
-            return null;
-        }
+        } catch (Throwable ignored) {}
+        try {
+            Field fieldH = phoneInfo.getClass().getDeclaredField("h");
+            fieldH.setAccessible(true);
+            Object valH = fieldH.get(phoneInfo);
+            if (valH instanceof String && !((String) valH).trim().isEmpty()) {
+                return ((String) valH).trim();
+            }
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
+    private static boolean isContactFromInfo(Context context, Object phoneInfo) {
+        if (phoneInfo == null) return false;
+        try {
+            Field fieldC = phoneInfo.getClass().getDeclaredField("c");
+            fieldC.setAccessible(true);
+            Object valC = fieldC.get(phoneInfo);
+            if (valC instanceof String && isContact(context, (String) valC)) {
+                return true;
+            }
+        } catch (Throwable ignored) {}
+        try {
+            Field fieldH = phoneInfo.getClass().getDeclaredField("h");
+            fieldH.setAccessible(true);
+            Object valH = fieldH.get(phoneInfo);
+            if (valH instanceof String && isContact(context, (String) valH)) {
+                return true;
+            }
+        } catch (Throwable ignored) {}
+        return false;
     }
 
     private static boolean isContact(Context context, String number) {
@@ -547,7 +596,7 @@ public class PhoneTweaksHook implements IXposedHookLoadPackage {
             }
             boolean naturallyTollFree = tollFreeField.getBoolean(phoneInfo);
             String number = getPhoneNumberFromInfo(phoneInfo);
-            boolean isContactNum = isContact(context, number);
+            boolean isContactNum = isContactFromInfo(context, phoneInfo);
 
             boolean allowDmc = false;
             if (prefs.isDirectMyCallEnabled()) {
@@ -560,6 +609,15 @@ public class PhoneTweaksHook implements IXposedHookLoadPackage {
                 }
             }
             currentCallAllowsDirectMyCall = allowDmc;
+
+            if (allowDmc) {
+                if (!prefs.isDirectMyCallTollFreeOnly()) {
+                    tollFreeField.setBoolean(phoneInfo, true);
+                }
+            } else {
+                tollFreeField.setBoolean(phoneInfo, false);
+            }
+
             Log.i(TAG, "Direct My Call evaluated: number=" + number
                     + ", naturallyTollFree=" + naturallyTollFree
                     + ", isContact=" + isContactNum
